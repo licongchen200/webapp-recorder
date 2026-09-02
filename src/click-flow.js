@@ -71,6 +71,11 @@ function startFrameCapture(page, dir, minIntervalMs) {
   })();
 
   return {
+    // The video timeline's origin. Narration offsets MUST be measured from
+    // this same instant — anything measured from an earlier clock (process
+    // start, the shell before node booted) lands every clip late by the
+    // difference, for the whole video.
+    t0,
     stop: async () => {
       stopped = true;
       await loop;
@@ -83,6 +88,70 @@ function startFrameCapture(page, dir, minIntervalMs) {
       return frames;
     },
   };
+}
+
+// Burned-in captions, drawn as a page overlay for the same reason the cursor
+// is: it lands in the screenshot at the moment the frame is captured, so a
+// caption is *structurally* incapable of drifting out of sync with the
+// narration it belongs to — no subtitle track, no timing math, no re-encode.
+// The avatar is composited over the finished video, in video pixels, while
+// the caption is laid out in page pixels — and the two differ whenever
+// `resolution` scales the capture. A percentage of width is identical in
+// both spaces, so setCaption below reserves the avatar's footprint that
+// way (computed in-page, where window.innerWidth is available) and the
+// caption wraps clear of it instead of running underneath.
+
+// Installs on demand and is idempotent, so it survives navigation and slide
+// setContent() without depending on addInitScript ordering (document.body
+// isn't guaranteed to exist when an init script runs).
+async function setCaption(page, text, flow = {}) {
+  await page.evaluate(({ text: t, flow: f }) => {
+    // Padding is resolved in-page so window.innerWidth is available when
+    // the flow didn't pin an output resolution.
+    const base = 9;
+    const a = f.avatar || {};
+    const position = a.position || 'bottom-right';
+    let padLeft = base;
+    let padRight = base;
+    if (a.enabled && position.indexOf('bottom') === 0) {
+      const target = parseInt((f.resolution || '').split('x')[0], 10);
+      const width = target > 0 ? target : window.innerWidth;
+      const pct = Math.round(((a.size || 280) + (a.margin == null ? 48 : a.margin) + 24) / width * 100);
+      if (position.slice(-5) === 'right') padRight = Math.max(base, pct);
+      else padLeft = Math.max(base, pct);
+    }
+    const css = `
+  #__demo-caption {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    padding: 26px ${padRight}% 30px ${padLeft}%;
+    text-align: center; pointer-events: none; z-index: 2147483646;
+    font: 500 22px/1.45 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    color: #f8fafc; text-shadow: 0 1px 4px rgba(0,0,0,.75);
+    background: linear-gradient(to top, rgba(2,6,23,.92) 45%, rgba(2,6,23,0));
+  }
+`;
+    let el = document.getElementById('__demo-caption');
+    if (!el) {
+      if (!document.body) return;
+      const style = document.createElement('style');
+      style.id = '__demo-caption-style';
+      style.textContent = css;
+      document.head.appendChild(style);
+      el = document.createElement('div');
+      el.id = '__demo-caption';
+      document.body.appendChild(el);
+    }
+    el.textContent = t || '';
+    el.style.display = t ? 'block' : 'none';
+  }, { text, flow: { avatar: flow.avatar, resolution: flow.resolution } }).catch(() => {
+    // page mid-navigation — the next assert re-installs it
+  });
+}
+
+// Whether this step/flow wants a caption, and what it should read.
+function captionFor(flow, step) {
+  if (flow.captions === false || step.captions === false) return '';
+  return step.say || '';
 }
 
 async function moveCursorTo(page, locator) {
@@ -138,11 +207,33 @@ async function fillWithCursor(page, locator, value) {
 // no auto-wait, so a click attempted right after navigation (e.g. right
 // after an intro slide's goto()) can hit the DOM before an SPA has
 // rendered — this is what Playwright's own locator actions auto-wait for.
+// An ambiguous match is the quiet failure mode of label-based resolution:
+// `getByText(..., {exact:false})` happily matches a partial or leftover
+// element, the wrong thing gets clicked, and the recording carries on as if
+// nothing were wrong. When more than one element matches we say so, and
+// prefer a visible one — a hidden leftover (e.g. a search trigger sitting
+// under an opened popup) is the usual culprit.
+async function disambiguate(loc, count, description, kind) {
+  console.warn(
+    `⚠ "${description}" matched ${count} ${kind}s — using the first visible one. `
+    + 'Use a role/testId/selector step to pin it down.',
+  );
+  if (typeof loc.nth !== 'function') return loc.first();
+  for (let i = 0; i < count; i++) {
+    const candidate = loc.nth(i);
+    if (typeof candidate.isVisible !== 'function') break;
+    if (await candidate.isVisible().catch(() => false)) return candidate;
+  }
+  return loc.first();
+}
+
 async function firstMatch(candidates, description, kind, timeoutMs = 5000) {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     for (const loc of candidates) {
-      if (await loc.count() > 0) return loc.first();
+      const count = await loc.count();
+      if (count === 1) return loc.first();
+      if (count > 1) return disambiguate(loc, count, description, kind);
     }
     if (Date.now() >= deadline) break;
     await new Promise((r) => setTimeout(r, 150));
@@ -192,9 +283,15 @@ async function locatorFor(page, step) {
 
 // How long to hold after a step: an explicit "wait" is a floor; narration
 // (when present) extends that floor so the audio never gets cut off.
-function computeHold(step, narrationMs) {
+//
+// `remainingNarrationMs` is what's LEFT of the clip once the step's own
+// action is done — not the clip's full length. The narration clock starts
+// when the step starts, but the click/fill/networkidle that follows is
+// already recorded video time covering it, so holding the full length again
+// would add that much dead air to every narrated step.
+function computeHold(step, remainingNarrationMs) {
   const minWait = step.wait || 0;
-  return step.say ? Math.max(minWait, narrationMs + 300) : minWait;
+  return step.say ? Math.max(minWait, remainingNarrationMs + 300) : minWait;
 }
 
 function escapeHtml(str) {
@@ -233,9 +330,10 @@ function slideHtml(title, subtitle) {
 // naturally, no separate frame-splicing needed. Narration (if any) is
 // logged into narrationEvents at the moment the slide appears, same
 // mechanism as step narration.
-async function showSlide(page, slideData, defaultWaitMs, startMs, narrationEvents) {
+async function showSlide(page, slideData, defaultWaitMs, startMs, narrationEvents, flow = {}) {
   if (!slideData) return;
-  const { title, subtitle, narration, wait } = slideData;
+  const captionsOn = flow.captions !== false;
+  const { title, subtitle, narration, wait, say } = slideData;
   // page.setContent() can fail outright ("requires TrustedHTML assignment")
   // on a page whose own CSP enforces Trusted Types (Cloudflare's dashboard
   // does, at least on some routes) — about:blank has no CSP, so land there
@@ -248,8 +346,10 @@ async function showSlide(page, slideData, defaultWaitMs, startMs, narrationEvent
     const offsetSec = (Date.now() - startMs) / 1000;
     narrationEvents.push({ offsetSec, file: narration.file, durationSec: narration.durationSec });
     hold = Math.max(hold, narration.durationSec * 1000 + 300);
+    if (captionsOn && say) await setCaption(page, say, flow);
   }
   await page.waitForTimeout(hold);
+  await setCaption(page, '', flow); // don't leak the slide's caption onto what follows
 }
 
 // Drives one flow (intro slide -> goto -> steps -> outro slide) against an
@@ -259,8 +359,9 @@ async function showSlide(page, slideData, defaultWaitMs, startMs, narrationEvent
 // isn't something a unit test should depend on).
 async function runFlow(page, flow, { startMs, narrationPlan, slidesPlan }) {
   const narrationEvents = [];
+  const captionsOn = flow.captions !== false;
 
-  await showSlide(page, slidesPlan.intro, 3000, startMs, narrationEvents);
+  await showSlide(page, slidesPlan.intro, 3000, startMs, narrationEvents, flow);
 
   await page.goto(flow.url);
   await page.evaluate(CURSOR_INIT); // apply to the already-loaded document too
@@ -268,13 +369,18 @@ async function runFlow(page, flow, { startMs, narrationPlan, slidesPlan }) {
   let stepIndex = 0;
   for (const step of flow.steps) {
     let narrationMs = 0;
+    let narrationStartedAt = 0;
+    const caption = captionFor(flow, step);
     if (step.say) {
       const offsetSec = (Date.now() - startMs) / 1000;
       const planned = narrationPlan[stepIndex];
       if (!planned) throw new Error(`No pre-synthesized narration for step ${stepIndex}`);
       narrationEvents.push({ offsetSec, file: planned.file, durationSec: planned.durationSec });
       narrationMs = planned.durationSec * 1000;
+      narrationStartedAt = Date.now();
     }
+    // Up before the action, so the caption is on screen for the whole line.
+    if (caption) await setCaption(page, caption, flow);
 
     if (step.fill !== undefined) {
       // AI fallback (opt-in via .env) only wraps the smart click/fill
@@ -290,15 +396,21 @@ async function runFlow(page, flow, { startMs, narrationPlan, slidesPlan }) {
       if (locator) await clickWithCursor(page, locator);
     }
 
-    const hold = computeHold(step, narrationMs);
+    // Re-assert: the action may have navigated, taking the overlay with it.
+    if (caption) await setCaption(page, caption, flow);
+
+    // The action above already consumed part of the narration's runtime.
+    const consumed = narrationStartedAt ? Date.now() - narrationStartedAt : 0;
+    const hold = computeHold(step, Math.max(0, narrationMs - consumed));
     if (hold > 0) await page.waitForTimeout(hold);
+    if (caption) await setCaption(page, '', flow); // the line is over — clear it
 
     stepIndex++;
   }
 
   await page.waitForTimeout(flow.holdMs ?? 2000); // hold the final frame
 
-  await showSlide(page, slidesPlan.outro, 2500, startMs, narrationEvents);
+  await showSlide(page, slidesPlan.outro, 2500, startMs, narrationEvents, flow);
 
   return narrationEvents;
 }
@@ -318,7 +430,6 @@ async function main() {
   if (!flowPath) throw new Error('Usage: node click-flow.js <flow.json>');
   const flow = JSON.parse(fs.readFileSync(flowPath, 'utf8'));
 
-  const startMs = process.env.START_MS ? Number(process.env.START_MS) : Date.now();
   const narrationLog = process.env.NARRATION_LOG
     || path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cf-narration-')), 'events.json');
   const framesDir = process.env.FRAMES_DIR
@@ -340,7 +451,10 @@ async function main() {
   await context.addInitScript(CURSOR_INIT); // re-applies on any in-flow navigation
 
   const capture = startFrameCapture(page, framesDir, 100); // ~10fps
-  const narrationEvents = await runFlow(page, flow, { startMs, narrationPlan, slidesPlan });
+  // capture.t0, not a clock from before this process started: the assembled
+  // video begins at the first captured frame, so that is the only origin
+  // narration offsets can be measured against without drifting.
+  const narrationEvents = await runFlow(page, flow, { startMs: capture.t0, narrationPlan, slidesPlan });
   const frames = await capture.stop();
 
   fs.writeFileSync(framesManifest, JSON.stringify(frames));
@@ -355,5 +469,5 @@ if (require.main === module) {
 
 module.exports = {
   firstMatch, resolveClickable, resolveInput, locatorFor, computeHold,
-  escapeHtml, slideHtml, runFlow,
+  escapeHtml, slideHtml, runFlow, startFrameCapture,
 };

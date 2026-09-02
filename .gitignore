@@ -5,3 +5,5 @@ tts-models/
 videos/
 .DS_Store
 .env
+avatar-cache/
+.tts-cache/

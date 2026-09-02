@@ -1,6 +1,6 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
-const { buildFilterComplex } = require('../src/mux-narration.js');
+const { buildFilterComplex, audioEndSec } = require('../src/mux-narration.js');
 
 describe('buildFilterComplex', () => {
   test('delays each clip to its recorded offset and mixes without volume ducking', () => {
@@ -33,5 +33,30 @@ describe('buildFilterComplex', () => {
     assert.match(filter, /\[2:a\]/);
     assert.match(filter, /\[3:a\]/);
     assert.match(filter, /amix=inputs=3:/);
+  });
+});
+
+// Regression: -shortest silently cut a narration that outran the recording —
+// the video just stopped mid-sentence with no warning. Now the last frame is
+// held to cover it, and the fast copy path is kept when it isn't needed.
+describe('audio overrun', () => {
+  test('audioEndSec is the end of the last clip, not the last offset', () => {
+    assert.equal(audioEndSec([
+      { offsetSec: 0, durationSec: 2 },
+      { offsetSec: 5, durationSec: 3 },
+    ]), 8);
+    assert.equal(audioEndSec([]), 0);
+  });
+
+  test('no padding requested keeps the graph audio-only, so video can be copied', () => {
+    const f = buildFilterComplex([{ offsetSec: 1, durationSec: 2 }]);
+    assert.ok(!f.includes('tpad'), 'no video filter when nothing overruns');
+    assert.ok(!f.includes('[vout]'));
+  });
+
+  test('padding holds the last video frame in the same graph', () => {
+    const f = buildFilterComplex([{ offsetSec: 1, durationSec: 2 }], 1.5);
+    assert.match(f, /\[0:v\]tpad=stop_mode=clone:stop_duration=1\.500\[vout\]/);
+    assert.match(f, /\[aout\]/, 'audio mix is still produced');
   });
 });
