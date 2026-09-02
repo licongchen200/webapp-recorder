@@ -2,6 +2,7 @@ const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { withAiFallback } = require('./ai-resolver.js');
 
 // Draws a fake cursor + click-ripple as a page overlay. Playwright's clicks
 // are synthetic (dispatched via CDP), so the real OS cursor never moves —
@@ -183,6 +184,12 @@ function computeHold(step, narrationMs) {
 // session/fingerprint so any bot-detection (Cloudflare, Google SSO, etc.)
 // doesn't re-trigger on a page that's already fully authenticated.
 async function main() {
+  try {
+    process.loadEnvFile(); // loads .env from cwd if present — optional, no error if missing
+  } catch {
+    // no .env file — fine, AI fallback (ENABLE_AI) just stays disabled
+  }
+
   const flowPath = process.argv[2];
   if (!flowPath) throw new Error('Usage: node click-flow.js <flow.json>');
   const flow = JSON.parse(fs.readFileSync(flowPath, 'utf8'));
@@ -223,8 +230,14 @@ async function main() {
     }
 
     if (step.fill !== undefined) {
-      const input = await resolveInput(page, step.fill);
+      // AI fallback (opt-in via .env) only wraps the smart click/fill
+      // resolvers — role/testId/text/selector steps stay AI-free since
+      // they're already a precise escape hatch.
+      const input = await withAiFallback(resolveInput, page, step.fill, 'fill');
       await fillWithCursor(page, input, step.value ?? '');
+    } else if (step.click) {
+      const locator = await withAiFallback(resolveClickable, page, step.click, 'click');
+      await clickWithCursor(page, locator);
     } else {
       const locator = await locatorFor(page, step);
       if (locator) await clickWithCursor(page, locator);

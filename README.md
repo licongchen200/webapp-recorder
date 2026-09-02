@@ -118,16 +118,37 @@ Two ways to improve, free:
 
 ## Known limits
 
-- The label-matching resolver is deterministic (plain Playwright locators,
-  no AI) — it needs the actual visible text/label, not a paraphrase, and
-  works best on apps with reasonable accessibility markup. Apps that are
-  icon-only, canvas-rendered, or have no semantic roles at all will need a
-  precise `role`/`testId`/`selector` step instead of `click`/`fill`.
+- The label-matching resolver is deterministic by default (plain Playwright
+  locators, no AI, zero cost) — it needs the actual visible text/label, not
+  a paraphrase, and works best on apps with reasonable accessibility markup.
+  Apps that are icon-only, canvas-rendered, or have no semantic roles at all
+  will need a precise `role`/`testId`/`selector` step instead of
+  `click`/`fill`, or the optional AI fallback below.
 - Occasionally an app's label renders with unexpected whitespace/punctuation
   (e.g. `"Overview—Domains"` with no spaces) — if a step can't find its
   target, a one-time DOM inspection of that element is the fix, not a
   rewrite of the flow.
 
-**Planned:** an AI-assisted fallback (only invoked when the deterministic
-resolver fails) for apps with poor accessibility markup, so a step can work
-from a vaguer description when heuristics alone aren't enough.
+## Optional AI fallback
+
+Off by default, zero behavior change unless you opt in. When a `click`/`fill`
+step's deterministic resolver finds nothing, it can retry once via Claude
+(Opus 5): the visible interactive elements on the page (role, text,
+placeholder — not a screenshot) are sent as a compact list, and Claude picks
+the best match by index, which becomes a real Playwright locator. This is
+what makes an icon-only button or a non-standard custom widget usable from a
+plain-language `click`/`fill` description without hand-writing a `selector`.
+
+**Enable it:**
+
+```bash
+cp .env.example .env
+# then edit .env:
+#   ENABLE_AI=true
+#   ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Both `ENABLE_AI=true` and a key are required — either alone leaves it off.
+Costs a small amount of real API spend (a few thousand tokens) per fallback
+call, only when the free heuristics already failed — never on a step that
+resolves normally. `.env` is gitignored; never commit your key.

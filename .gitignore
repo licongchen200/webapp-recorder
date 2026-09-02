@@ -3,3 +3,4 @@ node_modules/
 tts-models/
 videos/
 .DS_Store
+.env

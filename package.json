@@ -11,6 +11,9 @@
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.70.0"
+  },
   "devDependencies": {
     "playwright": "^1.62.1"
   }
