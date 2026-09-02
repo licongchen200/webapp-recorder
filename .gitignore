@@ -1,5 +1,6 @@
 node_modules/
 .tts-venv/
+.tts-venv-kokoro/
 tts-models/
 videos/
 .DS_Store

@@ -100,9 +100,11 @@ accessibility markup), see **Known limits** below before rewriting the flow.
 | `say: "<narration>"` | Text-to-speech narration for this step |
 | `wait: <ms>` | Minimum hold time after the step |
 | `holdMs` (top-level) | How long to hold the final frame before stopping |
-| `voice` (top-level) | `say` voice name (`say -v '?'` lists options). Ignored if `tts: "piper"` |
-| `tts` (top-level) | `"say"` (default) or `"piper"` — narration engine |
+| `voice` (top-level) | Voice name for `say` (`say -v '?'` lists options) or `kokoro` (defaults to `af_heart`). Ignored if `tts: "piper"` |
+| `tts` (top-level) | `"say"` (default), `"piper"`, or `"kokoro"` — narration engine |
 | `piperModel` (top-level) | Path to a Piper `.onnx` voice model. Defaults to `tts-models/en_US-lessac-high.onnx` |
+| `kokoroModel` / `kokoroVoices` (top-level) | Paths to Kokoro's `.onnx` model / voices `.bin`. Default to `tts-models/kokoro-v1.0.onnx` / `voices-v1.0.bin` |
+| `kokoroSpeed` (top-level) | Kokoro speech rate multiplier. Defaults to `1.0` |
 | `intro` / `outro` (top-level) | Title-card slide shown before/after the flow — see below |
 | `resolution` (top-level) | Scale the output video, e.g. `"1920x1080"` or `"1280x-2"` (`-1`/`-2` auto-scales that dimension preserving aspect ratio — ffmpeg convention). Otherwise the video is whatever size your Chrome window happened to be |
 
@@ -132,20 +134,33 @@ AI-dependent ever runs live during the recording.
 ### Better narration quality
 
 macOS's default `say` voices (e.g. `Samantha`) are serviceable but robotic.
-Two ways to improve, free:
+Three ways to improve, all free:
 
 - **macOS Enhanced/Premium voices** — System Settings → search "Spoken
   Content" (location varies by macOS version) → System Voice → Manage
   Voices → download an Enhanced/Premium voice (e.g. `Ava (Premium)`). Zero
   code changes — just put the exact name in `voice`. Requires the GUI;
   there's no CLI installer for these.
-- **Piper (recommended, more reliable to set up)** — free local neural TTS,
-  runs offline, no account or API key:
+- **Piper** — free local neural TTS, runs offline, no account or API key,
+  lightest/fastest of the two neural options:
   ```bash
   npm run tts:setup
   ```
-  Then set `"tts": "piper"` in your flow. Noticeably smoother than compact
-  `say` voices; not quite ElevenLabs-tier, but no cost and no network call.
+  Then set `"tts": "piper"` in your flow.
+- **Kokoro (best quality of the three, heavier setup)** — free local neural
+  TTS, noticeably more natural than Piper. Needs a dedicated Python 3.13 venv
+  (kokoro-onnx doesn't support 3.14 yet — `brew install python@3.13` if you
+  don't have it) and ~350MB of models:
+  ```bash
+  npm run tts:setup:kokoro
+  ```
+  Then set `"tts": "kokoro"` in your flow. Voice defaults to `af_heart`;
+  override with `voice` (see [available voices](https://github.com/thewh1teagle/kokoro-onnx#voices)),
+  or `kokoroSpeed` (default `1.0`).
+
+Rough guide: Piper if you want the simplest/fastest free upgrade over
+`say`; Kokoro if you want the best quality available offline and don't mind
+the heavier one-time setup.
 
 ## Known limits
 

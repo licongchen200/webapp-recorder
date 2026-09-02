@@ -5,7 +5,8 @@
   "main": "src/click-flow.js",
   "scripts": {
     "test": "node --test",
-    "tts:setup": "python3 -m venv .tts-venv && .tts-venv/bin/pip install --quiet piper-tts && mkdir -p tts-models && curl -sL -o tts-models/en_US-lessac-high.onnx https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/high/en_US-lessac-high.onnx && curl -sL -o tts-models/en_US-lessac-high.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/high/en_US-lessac-high.onnx.json && echo 'Piper ready — set \"tts\": \"piper\" in your flow JSON.'"
+    "tts:setup": "python3 -m venv .tts-venv && .tts-venv/bin/pip install --quiet piper-tts && mkdir -p tts-models && curl -sL -o tts-models/en_US-lessac-high.onnx https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/high/en_US-lessac-high.onnx && curl -sL -o tts-models/en_US-lessac-high.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/high/en_US-lessac-high.onnx.json && echo 'Piper ready — set \"tts\": \"piper\" in your flow JSON.'",
+    "tts:setup:kokoro": "command -v python3.13 >/dev/null 2>&1 || { echo 'Needs Python 3.13 (kokoro-onnx does not yet support 3.14) — install with: brew install python@3.13'; exit 1; } && python3.13 -m venv .tts-venv-kokoro && .tts-venv-kokoro/bin/pip install --quiet 'git+https://github.com/thewh1teagle/kokoro-onnx.git@main' soundfile && mkdir -p tts-models && curl -sL -o tts-models/kokoro-v1.0.onnx https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/kokoro-v1.0.onnx && curl -sL -o tts-models/voices-v1.0.bin https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/voices-v1.0.bin && echo 'Kokoro ready — set \"tts\": \"kokoro\" in your flow JSON.'"
   },
   "keywords": [],
   "author": "",

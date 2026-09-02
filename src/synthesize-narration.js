@@ -4,24 +4,44 @@
 // screencapture for CPU during the actual recording (that contention was
 // stretching some steps by 10+ seconds and cutting the video short).
 //
-// Two engines:
-//   "say"   (default) — macOS built-in, zero setup, robotic-ish compact voices
-//   "piper" — free local neural TTS, much smoother, needs `npm run tts:setup`
-//             once (installs a venv + downloads a voice model)
+// Three engines:
+//   "say"    (default) — macOS built-in, zero setup, robotic-ish compact voices
+//   "piper"  — free local neural TTS, smoother, needs `npm run tts:setup`
+//              once (installs a venv + downloads a voice model)
+//   "kokoro" — free local neural TTS, best quality of the three, needs
+//              `npm run tts:setup:kokoro` once (heavier: ~350MB of models,
+//              a dedicated Python 3.13 venv — kokoro-onnx doesn't yet
+//              support 3.14)
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { resolveSlideContent } = require('./slide-generator.js');
 
-const ROOT_DIR = path.join(__dirname, '..'); // .tts-venv/ and tts-models/ live at the project root, not src/
+const ROOT_DIR = path.join(__dirname, '..'); // .tts-venv*/ and tts-models/ live at the project root, not src/
 const PIPER_BIN = path.join(ROOT_DIR, '.tts-venv', 'bin', 'piper');
 const DEFAULT_PIPER_MODEL = path.join(ROOT_DIR, 'tts-models', 'en_US-lessac-high.onnx');
 
+const KOKORO_PYTHON = path.join(ROOT_DIR, '.tts-venv-kokoro', 'bin', 'python3');
+const KOKORO_SCRIPT = path.join(__dirname, 'kokoro-say.py');
+const DEFAULT_KOKORO_MODEL = path.join(ROOT_DIR, 'tts-models', 'kokoro-v1.0.onnx');
+const DEFAULT_KOKORO_VOICES = path.join(ROOT_DIR, 'tts-models', 'voices-v1.0.bin');
+const DEFAULT_KOKORO_VOICE = 'af_heart';
+
 // Given a flow, decides which TTS engine to use, the output file extension,
-// and (for piper) which voice model — pure decision logic, no I/O.
+// and engine-specific options — pure decision logic, no I/O.
 function getEngineConfig(flow) {
   if (flow.tts === 'piper') {
     return { engine: 'piper', ext: 'wav', modelPath: flow.piperModel || DEFAULT_PIPER_MODEL };
+  }
+  if (flow.tts === 'kokoro') {
+    return {
+      engine: 'kokoro',
+      ext: 'wav',
+      modelPath: flow.kokoroModel || DEFAULT_KOKORO_MODEL,
+      voicesPath: flow.kokoroVoices || DEFAULT_KOKORO_VOICES,
+      voice: flow.voice || DEFAULT_KOKORO_VOICE,
+      speed: flow.kokoroSpeed || 1.0,
+    };
   }
   return { engine: 'say', ext: 'aiff', voice: flow.voice };
 }
@@ -43,6 +63,18 @@ function synthesizeWithPiper(text, modelPath, outFile) {
   execFileSync(PIPER_BIN, ['-m', modelPath, '-f', outFile], { input: text });
 }
 
+function synthesizeWithKokoro(text, config, outFile) {
+  if (!fs.existsSync(KOKORO_PYTHON)) {
+    throw new Error('Kokoro not installed — run: npm run tts:setup:kokoro');
+  }
+  if (!fs.existsSync(config.modelPath) || !fs.existsSync(config.voicesPath)) {
+    throw new Error(`Kokoro model/voices not found: ${config.modelPath}, ${config.voicesPath}`);
+  }
+  execFileSync(KOKORO_PYTHON, [
+    KOKORO_SCRIPT, config.modelPath, config.voicesPath, config.voice, String(config.speed), outFile,
+  ], { input: text });
+}
+
 function getDurationSec(file) {
   return parseFloat(execFileSync('ffprobe', [
     '-v', 'error', '-show_entries', 'format=duration',
@@ -52,6 +84,7 @@ function getDurationSec(file) {
 
 function synthesize(text, config, outFile) {
   if (config.engine === 'piper') synthesizeWithPiper(text, config.modelPath, outFile);
+  else if (config.engine === 'kokoro') synthesizeWithKokoro(text, config, outFile);
   else synthesizeWithSay(text, config.voice, outFile);
   return { file: outFile, durationSec: getDurationSec(outFile) };
 }
@@ -101,4 +134,4 @@ if (require.main === module) {
   main().catch((err) => { console.error(err); process.exit(1); });
 }
 
-module.exports = { getEngineConfig, synthesizeWithPiper };
+module.exports = { getEngineConfig, synthesizeWithPiper, synthesizeWithKokoro };
