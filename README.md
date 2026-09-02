@@ -196,3 +196,11 @@ disabled). Override the model per provider with `ANTHROPIC_MODEL` /
 call (fractions of a cent — a Qwen fallback call runs about $0.00002),
 only when the free heuristics already failed — never on a step that
 resolves normally. `.env` is gitignored; never commit your key.
+
+**Privacy reminder:** when the fallback fires, the visible text/labels on
+your *current screen* (button/link text, placeholders, aria-labels — not a
+screenshot) get sent to whichever provider you configured. Same for
+AI-generated slide content (`intro`/`outro` with `generate: true`), which
+sends your flow's step narration text. Fine for most dashboards; worth a
+moment's thought before recording something with sensitive on-screen data.
+Leave `ENABLE_AI=false` (the default) if you'd rather it never happen.
