@@ -1,0 +1,13 @@
+{
+  "url": "https://dash.cloudflare.com/YOUR_ACCOUNT_ID/home",
+  "voice": "Samantha",
+  "steps": [
+    { "say": "Let's use quick search to jump straight to a domain's DNS records." },
+    { "click": "Quick search", "say": "Click Quick search in the sidebar.", "wait": 800 },
+    { "fill": "Search", "value": "domains", "say": "Type domains into the search bar.", "wait": 1500 },
+    { "click": "Overview—", "say": "Select Overview under Domains." },
+    { "click": "example.com", "say": "Click example dot com in the grid." },
+    { "click": "DNS Records", "say": "And open DNS Records from the sidebar.", "wait": 5000 }
+  ],
+  "holdMs": 4000
+}

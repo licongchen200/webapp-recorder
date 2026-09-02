@@ -1,0 +1,5 @@
+node_modules/
+.tts-venv/
+tts-models/
+videos/
+.DS_Store

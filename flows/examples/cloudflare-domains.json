@@ -1,0 +1,11 @@
+{
+  "url": "https://dash.cloudflare.com/YOUR_ACCOUNT_ID/home",
+  "voice": "Samantha",
+  "steps": [
+    { "say": "Let's take a look at our domains in Cloudflare." },
+    { "click": "Domains", "say": "First, click Domains in the sidebar." },
+    { "click": "Overview", "say": "Then open the Overview." },
+    { "click": "example.com", "say": "And select example dot com.", "wait": 6000 }
+  ],
+  "holdMs": 5000
+}

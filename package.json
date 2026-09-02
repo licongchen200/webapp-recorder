@@ -1,0 +1,17 @@
+{
+  "name": "webapp-recorder",
+  "version": "1.0.0",
+  "description": "Scripted, narrated screen recordings of any logged-in web app — describe clicks/fills in plain labels, no DOM inspection or codegen session required.",
+  "main": "src/click-flow.js",
+  "scripts": {
+    "test": "node --test",
+    "tts:setup": "python3 -m venv .tts-venv && .tts-venv/bin/pip install --quiet piper-tts && mkdir -p tts-models && curl -sL -o tts-models/en_US-lessac-high.onnx https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/high/en_US-lessac-high.onnx && curl -sL -o tts-models/en_US-lessac-high.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/high/en_US-lessac-high.onnx.json && echo 'Piper ready — set \"tts\": \"piper\" in your flow JSON.'"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "playwright": "^1.62.1"
+  }
+}
