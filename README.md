@@ -181,6 +181,17 @@ re-encode involved.
 { "steps": [{ "click": "Go", "say": "…", "captions": false }] }  // off for one step
 ```
 
+### Subtitles
+
+Every recording also writes `<video>.srt` and `.vtt` beside it, and embeds a
+subtitle track into the file itself — so players (QuickTime, VLC) can toggle
+captions on and off, and YouTube gets a caption file to upload.
+
+These are exact, not transcribed: the text is the same string handed to the
+TTS engine, and the timings are measured against the frame-capture origin.
+A step with `captions: false` still gets a cue — that flag controls what is
+painted on the frame, not what's in the accessibility track.
+
 ### Lip-synced avatar (optional)
 
 A talking-head overlay in one corner, mouth synced to the narration, added
@@ -209,9 +220,13 @@ after the recording is muxed. Off unless a flow asks for it:
 | `position` | `bottom-right` (default), `bottom-left`, `top-right`, `top-left` |
 | `size` / `margin` | diameter of the circular cutout, and its inset from the frame edges |
 
-The models themselves live in the sibling **video-pipeline** project and are
-shared, not duplicated — run `make avatar-setup` (or `make
-avatar-setup-sadtalker`) there once. Clips are cached in `avatar-cache/` by
+This is the one feature that reaches outside this repo. The engines and their
+~3GB of checkpoints live in
+[video-pipeline](https://github.com/licongchen200/video-pipeline) and are
+borrowed rather than duplicated — clone it beside this repo and run `make
+avatar-setup` (or `make avatar-setup-sadtalker`) there once. If it lives
+somewhere else, set `VIDEO_PIPELINE_DIR` or `avatar.pipelineDir` in the flow.
+Everything else here works standalone. Clips are cached in `avatar-cache/` by
 photo+audio content, so re-recording a flow whose narration didn't change
 doesn't re-run the models.
 

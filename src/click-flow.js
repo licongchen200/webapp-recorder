@@ -344,7 +344,9 @@ async function showSlide(page, slideData, defaultWaitMs, startMs, narrationEvent
   let hold = wait ?? defaultWaitMs;
   if (narration) {
     const offsetSec = (Date.now() - startMs) / 1000;
-    narrationEvents.push({ offsetSec, file: narration.file, durationSec: narration.durationSec });
+    // `text` rides along so the subtitle writer has the exact words spoken,
+    // rather than having to transcribe the audio back.
+    narrationEvents.push({ offsetSec, file: narration.file, durationSec: narration.durationSec, text: say });
     hold = Math.max(hold, narration.durationSec * 1000 + 300);
     if (captionsOn && say) await setCaption(page, say, flow);
   }
@@ -375,7 +377,7 @@ async function runFlow(page, flow, { startMs, narrationPlan, slidesPlan }) {
       const offsetSec = (Date.now() - startMs) / 1000;
       const planned = narrationPlan[stepIndex];
       if (!planned) throw new Error(`No pre-synthesized narration for step ${stepIndex}`);
-      narrationEvents.push({ offsetSec, file: planned.file, durationSec: planned.durationSec });
+      narrationEvents.push({ offsetSec, file: planned.file, durationSec: planned.durationSec, text: step.say });
       narrationMs = planned.durationSec * 1000;
       narrationStartedAt = Date.now();
     }

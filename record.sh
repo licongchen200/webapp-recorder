@@ -52,5 +52,11 @@ fi
 # re-recording the same flow doesn't re-run the models.
 node src/apply-avatar.js "$FLOW" "$OUT" "$NARRATION_LOG" avatar-cache
 
+# Closed captions: a sidecar .srt/.vtt pair next to the recording, plus a
+# track inside it. Runs last so it sees the final video (post-avatar).
+if [ "$EVENT_COUNT" -gt 0 ]; then
+  node src/write-subtitles.js "$OUT" "$NARRATION_LOG"
+fi
+
 rm -rf "$WORK_DIR"
 echo "Saved $OUT"
