@@ -1,6 +1,6 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
-const { resolveClickable, resolveInput, locatorFor, computeHold } = require('../src/click-flow.js');
+const { resolveClickable, resolveInput, locatorFor, computeHold, escapeHtml, slideHtml } = require('../src/click-flow.js');
 
 // Minimal fake Playwright locator/page — just enough to drive the priority-
 // fallback logic without a real browser.
@@ -43,9 +43,26 @@ describe('resolveClickable priority order', () => {
   test('throws a descriptive error when nothing matches', async () => {
     const page = makeFakePage({});
     await assert.rejects(
-      () => resolveClickable(page, 'Nonexistent Button'),
+      () => resolveClickable(page, 'Nonexistent Button', 20), // short timeout — keep the test fast
       /No clickable element found matching "Nonexistent Button"/,
     );
+  });
+
+  test('retries until timeoutMs before giving up (covers a click right after navigation)', async () => {
+    // A real Playwright locator re-queries the live DOM on every .count()
+    // call — this mock's count() must be re-evaluated per call too, not
+    // captured once when the locator is constructed.
+    let pollCount = 0;
+    const buttonLocator = {
+      count: async () => { pollCount++; return pollCount >= 3 ? 1 : 0; }, // "appears" on the 3rd poll
+      first: () => 'role:button',
+    };
+    const page = {
+      getByRole: (role) => (role === 'button' ? buttonLocator : makeLocator(0, `role:${role}`)),
+      getByPlaceholder: () => makeLocator(0, 'placeholder'),
+      getByText: () => makeLocator(0, 'text'),
+    };
+    assert.equal(await resolveClickable(page, 'Save', 2000), 'role:button');
   });
 });
 
@@ -73,7 +90,7 @@ describe('resolveInput priority order', () => {
   test('throws a descriptive error when nothing matches', async () => {
     const page = makeFakePage({});
     await assert.rejects(
-      () => resolveInput(page, 'Nonexistent Field'),
+      () => resolveInput(page, 'Nonexistent Field', 20), // short timeout — keep the test fast
       /No input field found matching "Nonexistent Field"/,
     );
   });
@@ -113,5 +130,29 @@ describe('computeHold', () => {
 
   test('an explicit wait longer than the narration wins', () => {
     assert.equal(computeHold({ say: 'hi', wait: 5000 }, 2000), 5000);
+  });
+});
+
+describe('escapeHtml', () => {
+  test('escapes all five HTML-significant characters', () => {
+    assert.equal(escapeHtml(`<script>alert("hi") & 'bye'</script>`),
+      '&lt;script&gt;alert(&quot;hi&quot;) &amp; &#39;bye&#39;&lt;/script&gt;');
+  });
+
+  test('leaves plain text untouched', () => {
+    assert.equal(escapeHtml('Cloudflare Domains Demo'), 'Cloudflare Domains Demo');
+  });
+});
+
+describe('slideHtml', () => {
+  test('includes the escaped title and omits the subtitle paragraph when absent', () => {
+    const html = slideHtml('Demo <Title>', undefined);
+    assert.match(html, /<h1>Demo &lt;Title&gt;<\/h1>/);
+    assert.doesNotMatch(html, /<p>/);
+  });
+
+  test('includes an escaped subtitle paragraph when given', () => {
+    const html = slideHtml('Title', `A "quick" tour`);
+    assert.match(html, /<p>A &quot;quick&quot; tour<\/p>/);
   });
 });

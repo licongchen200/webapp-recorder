@@ -125,14 +125,23 @@ async function fillWithCursor(page, locator, value) {
 // actually matches something on the page right now — lets a step just name
 // what a person would see ("Domains", "Search domains...") instead of
 // requiring a prior DOM-inspection/recording pass to find exact selectors.
-async function firstMatch(candidates, description, kind) {
-  for (const loc of candidates) {
-    if (await loc.count() > 0) return loc.first();
+// Retries for up to timeoutMs: a bare .count() is a one-shot snapshot with
+// no auto-wait, so a click attempted right after navigation (e.g. right
+// after an intro slide's goto()) can hit the DOM before an SPA has
+// rendered — this is what Playwright's own locator actions auto-wait for.
+async function firstMatch(candidates, description, kind, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    for (const loc of candidates) {
+      if (await loc.count() > 0) return loc.first();
+    }
+    if (Date.now() >= deadline) break;
+    await new Promise((r) => setTimeout(r, 150));
   }
   throw new Error(`No ${kind} found matching "${description}"`);
 }
 
-function resolveClickable(page, description) {
+function resolveClickable(page, description, timeoutMs) {
   return firstMatch([
     page.getByRole('button', { name: description }),
     page.getByRole('link', { name: description }),
@@ -140,10 +149,10 @@ function resolveClickable(page, description) {
     page.getByRole('option', { name: description }), // e.g. a search/combobox result row
     page.getByPlaceholder(description), // e.g. a search-bar-styled input, no real text node
     page.getByText(description, { exact: false }),
-  ], description, 'clickable element');
+  ], description, 'clickable element', timeoutMs);
 }
 
-function resolveInput(page, description) {
+function resolveInput(page, description, timeoutMs) {
   return firstMatch([
     // Role-based first: guaranteed to be an actual form control, unlike
     // getByLabel/getByPlaceholder which can accidentally match a *button*
@@ -154,7 +163,7 @@ function resolveInput(page, description) {
     page.getByRole('combobox', { name: description }), // e.g. an autocomplete/search-palette input
     page.getByPlaceholder(description),
     page.getByLabel(description),
-  ], description, 'input field');
+  ], description, 'input field', timeoutMs);
 }
 
 // Step shape: a locator via one of —
@@ -177,6 +186,56 @@ async function locatorFor(page, step) {
 function computeHold(step, narrationMs) {
   const minWait = step.wait || 0;
   return step.say ? Math.max(minWait, narrationMs + 300) : minWait;
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
+// A polished, theme-neutral title card — a soft gradient, a small accent
+// bar, and real typographic hierarchy, but no app-specific branding, so it
+// works the same for any flow.
+function slideHtml(title, subtitle) {
+  return `<!doctype html><html><head><meta charset="utf-8"><style>
+    html,body{margin:0;height:100%;
+      background:radial-gradient(circle at 25% 20%, #1e293b 0%, #0f172a 55%, #0a0f1c 100%);
+      color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+      display:flex;align-items:center;justify-content:center;}
+    .card{max-width:920px;padding:0 64px;text-align:center;}
+    .accent{width:72px;height:5px;margin:0 auto 32px;border-radius:3px;
+      background:linear-gradient(90deg,#38bdf8,#818cf8);}
+    h1{font-size:60px;font-weight:800;letter-spacing:-0.02em;line-height:1.15;margin:0;}
+    p{font-size:23px;font-weight:400;color:#94a3b8;margin:22px 0 0;line-height:1.55;}
+  </style></head><body>
+    <div class="card">
+      <div class="accent"></div>
+      <h1>${escapeHtml(title)}</h1>
+      ${subtitle ? `<p>${escapeHtml(subtitle)}</p>` : ''}
+    </div>
+  </body></html>`;
+}
+
+// Renders a pre-resolved intro/outro slide (see synthesize-narration.js —
+// content and any AI generation are resolved *before* recording starts,
+// same as step narration) on the same page/tab already being
+// screenshotted — the continuously-running frame capture picks it up
+// naturally, no separate frame-splicing needed. Narration (if any) is
+// logged into narrationEvents at the moment the slide appears, same
+// mechanism as step narration.
+async function showSlide(page, slideData, defaultWaitMs, startMs, narrationEvents) {
+  if (!slideData) return;
+  const { title, subtitle, narration, wait } = slideData;
+  await page.setContent(slideHtml(title, subtitle));
+
+  let hold = wait ?? defaultWaitMs;
+  if (narration) {
+    const offsetSec = (Date.now() - startMs) / 1000;
+    narrationEvents.push({ offsetSec, file: narration.file, durationSec: narration.durationSec });
+    hold = Math.max(hold, narration.durationSec * 1000 + 300);
+  }
+  await page.waitForTimeout(hold);
 }
 
 // Attaches to the already-open, already-logged-in Chrome (debug port 9222)
@@ -205,6 +264,9 @@ async function main() {
   const narrationPlan = process.env.NARRATION_PLAN
     ? JSON.parse(fs.readFileSync(process.env.NARRATION_PLAN, 'utf8'))
     : [];
+  const slidesPlan = process.env.SLIDES_PLAN
+    ? JSON.parse(fs.readFileSync(process.env.SLIDES_PLAN, 'utf8'))
+    : {};
   const narrationEvents = [];
 
   const browser = await chromium.connectOverCDP('http://localhost:9222');
@@ -214,6 +276,8 @@ async function main() {
   await context.addInitScript(CURSOR_INIT); // re-applies on any in-flow navigation
 
   const capture = startFrameCapture(page, framesDir, 100); // ~10fps
+
+  await showSlide(page, slidesPlan.intro, 3000, startMs, narrationEvents);
 
   await page.goto(flow.url);
   await page.evaluate(CURSOR_INIT); // apply to the already-loaded document too
@@ -251,6 +315,8 @@ async function main() {
 
   await page.waitForTimeout(flow.holdMs ?? 2000); // hold the final frame
 
+  await showSlide(page, slidesPlan.outro, 2500, startMs, narrationEvents);
+
   const frames = await capture.stop();
   fs.writeFileSync(framesManifest, JSON.stringify(frames));
   fs.writeFileSync(narrationLog, JSON.stringify(narrationEvents));
@@ -262,4 +328,7 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { firstMatch, resolveClickable, resolveInput, locatorFor, computeHold };
+module.exports = {
+  firstMatch, resolveClickable, resolveInput, locatorFor, computeHold,
+  escapeHtml, slideHtml,
+};

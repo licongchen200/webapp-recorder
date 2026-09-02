@@ -18,17 +18,19 @@ OUT="videos/$BASE.mov"
 WORK_DIR=$(mktemp -d)
 NARRATION_LOG="$WORK_DIR/events.json"
 NARRATION_PLAN="$WORK_DIR/plan.json"
+SLIDES_PLAN="$WORK_DIR/slides.json"
 FRAMES_DIR="$WORK_DIR/frames"
 FRAMES_MANIFEST="$WORK_DIR/frames.json"
 
-# Synthesize all narration audio up front — `say`/ffprobe are slow and
-# variable under load, and running them *during* the recording was stealing
-# CPU and throwing off step timing.
-node src/synthesize-narration.js "$FLOW" "$WORK_DIR"
+# Synthesize all narration audio (steps + intro/outro slides) and resolve
+# any AI-generated slide content up front — `say`/ffprobe/AI calls are slow
+# and variable under load, and running them *during* the recording was
+# stealing CPU and throwing off step timing.
+SLIDES_PLAN="$SLIDES_PLAN" node src/synthesize-narration.js "$FLOW" "$WORK_DIR"
 
 START_MS=$(node -e 'console.log(Date.now())')
 START_MS="$START_MS" NARRATION_LOG="$NARRATION_LOG" NARRATION_PLAN="$NARRATION_PLAN" \
-  FRAMES_DIR="$FRAMES_DIR" FRAMES_MANIFEST="$FRAMES_MANIFEST" \
+  SLIDES_PLAN="$SLIDES_PLAN" FRAMES_DIR="$FRAMES_DIR" FRAMES_MANIFEST="$FRAMES_MANIFEST" \
   node src/click-flow.js "$FLOW"
 
 node src/assemble-video.js "$FRAMES_MANIFEST" "$RAW"

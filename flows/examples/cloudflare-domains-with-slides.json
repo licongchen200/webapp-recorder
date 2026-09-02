@@ -1,0 +1,13 @@
+{
+  "url": "https://dash.cloudflare.com/YOUR_ACCOUNT_ID/home",
+  "voice": "Samantha",
+  "intro": { "title": "Cloudflare Domains", "subtitle": "A quick walkthrough of the dashboard", "wait": 2500 },
+  "outro": { "generate": true, "wait": 2500 },
+  "steps": [
+    { "say": "Let's take a look at our domains in Cloudflare." },
+    { "click": "Domains", "say": "First, click Domains in the sidebar." },
+    { "click": "Overview", "say": "Then open the Overview." },
+    { "click": "example.com", "say": "And select example dot com.", "wait": 4000 }
+  ],
+  "holdMs": 2000
+}

@@ -83,6 +83,10 @@ accessibility markup), see **Known limits** below before rewriting the flow.
   the flow).
 - A step's `wait` (explicit hold) and narration duration both extend how
   long the page stays visible before moving on.
+- Click/fill resolution retries for up to 5s (not a one-shot check) — this
+  matters most right after a navigation (e.g. right after an intro slide),
+  where the target app's SPA needs a moment to render before its buttons
+  exist in the DOM.
 
 ## Step reference
 
@@ -97,6 +101,30 @@ accessibility markup), see **Known limits** below before rewriting the flow.
 | `voice` (top-level) | `say` voice name (`say -v '?'` lists options). Ignored if `tts: "piper"` |
 | `tts` (top-level) | `"say"` (default) or `"piper"` — narration engine |
 | `piperModel` (top-level) | Path to a Piper `.onnx` voice model. Defaults to `tts-models/en_US-lessac-high.onnx` |
+| `intro` / `outro` (top-level) | Title-card slide shown before/after the flow — see below |
+
+### Intro / outro slides
+
+A title card rendered before the flow starts (`intro`) and/or after it ends
+(`outro`) — a polished dark gradient card with a title, optional subtitle,
+and optional narration. It's captured by the same recording, not spliced in
+separately, so it needs no extra tooling.
+
+```json
+"intro": { "title": "Cloudflare Domains", "subtitle": "A quick tour", "say": "Let's take a look.", "wait": 2500 }
+"outro": { "title": "Thanks for watching!" }
+```
+
+| Form | Meaning |
+|---|---|
+| `"Some title"` (string) | Literal title, no subtitle, no AI |
+| `{ title, subtitle?, say?, wait? }` | Literal — `say` is optional spoken narration for the card, `wait` overrides the default hold (3000ms intro / 2500ms outro) |
+| `true` | Let the LLM write the title, subtitle, and narration from the flow's own step narration — requires the AI fallback to be configured (below) |
+| `{ generate: true \| "<hint>", say?, wait? }` | Same as `true`, optionally steering the LLM with a hint. An explicit `say` always wins over AI-generated narration |
+
+Content resolution (including any AI call) and narration synthesis both
+happen *before* recording starts, same as step narration — nothing slow or
+AI-dependent ever runs live during the recording.
 
 ### Better narration quality
 
