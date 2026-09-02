@@ -75,7 +75,9 @@ accessibility markup), see **Known limits** below before rewriting the flow.
   the same way a person would describe "the Billing button", not a CSS path.
 - Records the page's own rendering via `page.screenshot()` over CDP, not the
   OS screen — immune to other windows covering the screen, no Screen
-  Recording permission needed.
+  Recording permission needed. The tab is periodically re-asserted as
+  frontmost during capture — Chrome's compositor can otherwise paint a tab
+  that's lost visibility for a while (e.g. during a long `holdMs`) as blank.
 - Narration is synthesized up front (before recording starts), then muxed
   onto the video at the recorded timestamp for each step. Two engines —
   macOS's built-in `say` (default, zero setup) or Piper (`npm run tts:setup`
@@ -102,6 +104,7 @@ accessibility markup), see **Known limits** below before rewriting the flow.
 | `tts` (top-level) | `"say"` (default) or `"piper"` — narration engine |
 | `piperModel` (top-level) | Path to a Piper `.onnx` voice model. Defaults to `tts-models/en_US-lessac-high.onnx` |
 | `intro` / `outro` (top-level) | Title-card slide shown before/after the flow — see below |
+| `resolution` (top-level) | Scale the output video, e.g. `"1920x1080"` or `"1280x-2"` (`-1`/`-2` auto-scales that dimension preserving aspect ratio — ffmpeg convention). Otherwise the video is whatever size your Chrome window happened to be |
 
 ### Intro / outro slides
 

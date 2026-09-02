@@ -46,9 +46,18 @@ function startFrameCapture(page, dir, minIntervalMs) {
   const t0 = Date.now();
   let stopped = false;
   let i = 0;
+  let tick = 0;
 
   const loop = (async () => {
     while (!stopped) {
+      // Periodically re-assert this tab as frontmost: during a long idle
+      // hold (e.g. a large holdMs with no clicks), Chrome's compositor can
+      // decide a tab that's lost visibility doesn't need painting and
+      // starts returning blank/black screenshots. This is cheap insurance
+      // regardless of what actually stole visibility.
+      if (tick % 10 === 0) await page.bringToFront().catch(() => {});
+      tick++;
+
       const file = path.join(dir, `frame-${String(i).padStart(6, '0')}.jpg`);
       try {
         await page.screenshot({ path: file, type: 'jpeg', quality: 85 });
@@ -227,6 +236,11 @@ function slideHtml(title, subtitle) {
 async function showSlide(page, slideData, defaultWaitMs, startMs, narrationEvents) {
   if (!slideData) return;
   const { title, subtitle, narration, wait } = slideData;
+  // page.setContent() can fail outright ("requires TrustedHTML assignment")
+  // on a page whose own CSP enforces Trusted Types (Cloudflare's dashboard
+  // does, at least on some routes) — about:blank has no CSP, so land there
+  // first regardless of what page the flow is currently on.
+  await page.goto('about:blank');
   await page.setContent(slideHtml(title, subtitle));
 
   let hold = wait ?? defaultWaitMs;

@@ -22,17 +22,35 @@ function buildConcatLines(frames) {
   return lines;
 }
 
+// "1920x1080" -> "1920:1080" (ffmpeg scale filter syntax). Either side can
+// be -1 or -2 to auto-scale that dimension preserving aspect ratio (ffmpeg
+// convention — -2 rounds to an even number, required by some codecs).
+function parseResolution(resolution) {
+  const match = /^(-?\d+)x(-?\d+)$/.exec(resolution);
+  if (!match) {
+    throw new Error(
+      `Invalid "resolution" — expected "WIDTHxHEIGHT" (e.g. "1920x1080", or "1920x-2" `
+      + `to auto-scale height preserving aspect ratio), got "${resolution}"`,
+    );
+  }
+  return `${match[1]}:${match[2]}`;
+}
+
 function main() {
-  const [, , framesManifestPath, outPath] = process.argv;
+  const [, , framesManifestPath, flowPath, outPath] = process.argv;
   const frames = JSON.parse(fs.readFileSync(framesManifestPath, 'utf8'));
+  const flow = JSON.parse(fs.readFileSync(flowPath, 'utf8'));
 
   const listPath = path.join(os.tmpdir(), `frames-${Date.now()}.txt`);
   fs.writeFileSync(listPath, buildConcatLines(frames).join('\n'));
 
-  execFileSync('ffmpeg', [
-    '-y', '-f', 'concat', '-safe', '0', '-i', listPath,
-    '-vsync', 'vfr', '-pix_fmt', 'yuv420p', outPath,
-  ], { stdio: 'inherit' });
+  const args = ['-y', '-f', 'concat', '-safe', '0', '-i', listPath];
+  if (flow.resolution) {
+    args.push('-vf', `scale=${parseResolution(flow.resolution)}`);
+  }
+  args.push('-vsync', 'vfr', '-pix_fmt', 'yuv420p', outPath);
+
+  execFileSync('ffmpeg', args, { stdio: 'inherit' });
 
   fs.unlinkSync(listPath);
 }
@@ -41,4 +59,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { buildConcatLines };
+module.exports = { buildConcatLines, parseResolution };

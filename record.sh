@@ -33,7 +33,7 @@ START_MS="$START_MS" NARRATION_LOG="$NARRATION_LOG" NARRATION_PLAN="$NARRATION_P
   SLIDES_PLAN="$SLIDES_PLAN" FRAMES_DIR="$FRAMES_DIR" FRAMES_MANIFEST="$FRAMES_MANIFEST" \
   node src/click-flow.js "$FLOW"
 
-node src/assemble-video.js "$FRAMES_MANIFEST" "$RAW"
+node src/assemble-video.js "$FRAMES_MANIFEST" "$FLOW" "$RAW"
 
 EVENT_COUNT=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1])).length)" "$NARRATION_LOG")
 if [ "$EVENT_COUNT" -gt 0 ]; then
