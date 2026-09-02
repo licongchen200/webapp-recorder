@@ -132,23 +132,36 @@ Two ways to improve, free:
 ## Optional AI fallback
 
 Off by default, zero behavior change unless you opt in. When a `click`/`fill`
-step's deterministic resolver finds nothing, it can retry once via Claude
-(Opus 5): the visible interactive elements on the page (role, text,
-placeholder — not a screenshot) are sent as a compact list, and Claude picks
-the best match by index, which becomes a real Playwright locator. This is
-what makes an icon-only button or a non-standard custom widget usable from a
-plain-language `click`/`fill` description without hand-writing a `selector`.
+step's deterministic resolver finds nothing, it can retry once via an LLM:
+the visible interactive elements on the page (role, text, placeholder — not
+a screenshot) are sent as a compact list, and the model picks the best match
+by index via a forced tool call, which becomes a real Playwright locator.
+This is what makes an icon-only button or a non-standard custom widget
+usable from a plain-language `click`/`fill` description without hand-writing
+a `selector`.
+
+Two providers:
+
+| Provider | `AI_PROVIDER` | Key | Default model |
+|---|---|---|---|
+| Anthropic (Claude) | `anthropic` (default) | `ANTHROPIC_API_KEY` | `claude-opus-5` |
+| OpenRouter (any hosted model) | `openrouter` | `OPENROUTER_API_KEY` | `qwen/qwen3.7-flash` |
 
 **Enable it:**
 
 ```bash
 cp .env.example .env
-# then edit .env:
+# then edit .env, e.g. for OpenRouter/Qwen:
 #   ENABLE_AI=true
-#   ANTHROPIC_API_KEY=sk-ant-...
+#   AI_PROVIDER=openrouter
+#   OPENROUTER_API_KEY=sk-or-...
 ```
 
-Both `ENABLE_AI=true` and a key are required — either alone leaves it off.
-Costs a small amount of real API spend (a few thousand tokens) per fallback
-call, only when the free heuristics already failed — never on a step that
+`ENABLE_AI=true` plus the selected provider's key are both required —
+missing either leaves it off (and the wrong provider's key being set doesn't
+count: `AI_PROVIDER=openrouter` with only `ANTHROPIC_API_KEY` set stays
+disabled). Override the model per provider with `ANTHROPIC_MODEL` /
+`OPENROUTER_MODEL`. Costs a small amount of real API spend per fallback
+call (fractions of a cent — a Qwen fallback call runs about $0.00002),
+only when the free heuristics already failed — never on a step that
 resolves normally. `.env` is gitignored; never commit your key.
