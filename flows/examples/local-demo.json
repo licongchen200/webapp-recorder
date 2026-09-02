@@ -1,0 +1,28 @@
+{
+  "url": "http://localhost:8765/",
+  "tts": "kokoro",
+  "resolution": "1280x-2",
+  "holdMs": 1200,
+  "intro": {
+    "title": "Acme Console",
+    "subtitle": "Finding an invoice in 30 seconds",
+    "say": "Here's how to find an invoice in the Acme console."
+  },
+  "avatar": {
+    "enabled": true,
+    "face": "../video-pipeline/assets/w1.jpg",
+    "engine": "sadtalker",
+    "position": "bottom-right",
+    "size": 221,
+    "margin": 40
+  },
+  "steps": [
+    { "click": "Billing", "say": "Open Billing from the top navigation." },
+    { "fill": "Search invoices", "value": "March", "say": "Search for the month you need.", "wait": 1200 },
+    { "click": "Settings", "say": "Settings shows the current plan." }
+  ],
+  "outro": {
+    "title": "That's it",
+    "say": "That's all it takes."
+  }
+}

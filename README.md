@@ -21,8 +21,14 @@ directly.
 it doesn't touch your everyday browsing session:
 
 ```bash
-open -a "Google Chrome" --args --remote-debugging-port=9222 --user-data-dir="$HOME/chrome-recorder-profile"
+open -a "Google Chrome" --args --remote-debugging-port=9222 --user-data-dir="$HOME/chrome-recorder-profile" --window-size=1440,900
 ```
+
+The recording is a capture of the page itself, so **the window size is the
+video's aspect ratio**. Without `--window-size` you can end up with a tall,
+mostly-empty frame. If Chrome is already running, `open` will just focus it
+and ignore these flags — launch the binary directly instead:
+`"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9222 ...`
 
 **2. Log in manually** in that window — SSO, 2FA, whatever the app needs.
 This is a real login in a real browser, so nothing about it looks automated;
@@ -161,6 +167,56 @@ Three ways to improve, all free:
 Rough guide: Piper if you want the simplest/fastest free upgrade over
 `say`; Kokoro if you want the best quality available offline and don't mind
 the heavier one-time setup.
+
+### Captions
+
+On by default: each narrated line is burned into the frame as it's spoken.
+They're drawn as a page overlay (the same mechanism as the cursor), so a
+caption is in the screenshot at the instant it's captured — it *cannot*
+drift out of sync with its audio, and there's no subtitle track or
+re-encode involved.
+
+```json
+{ "captions": false }                                  // off for the whole flow
+{ "steps": [{ "click": "Go", "say": "…", "captions": false }] }  // off for one step
+```
+
+### Lip-synced avatar (optional)
+
+A talking-head overlay in one corner, mouth synced to the narration, added
+after the recording is muxed. Off unless a flow asks for it:
+
+```json
+{
+  "url": "https://example.com/dashboard",
+  "tts": "kokoro",
+  "avatar": {
+    "enabled": true,
+    "face": "assets/me.jpg",
+    "engine": "wav2lip",
+    "position": "bottom-right",
+    "size": 280,
+    "margin": 48
+  },
+  "steps": [{ "click": "Billing", "say": "Open the billing page." }]
+}
+```
+
+| field | meaning |
+|---|---|
+| `face` | one clear, front-facing photo. You supply this — nothing is auto-sourced |
+| `engine` | `wav2lip` (fast, ~seconds, visible mouth patch) or `sadtalker` (~5s per output frame, far more convincing) |
+| `position` | `bottom-right` (default), `bottom-left`, `top-right`, `top-left` |
+| `size` / `margin` | diameter of the circular cutout, and its inset from the frame edges |
+
+The models themselves live in the sibling **video-pipeline** project and are
+shared, not duplicated — run `make avatar-setup` (or `make
+avatar-setup-sadtalker`) there once. Clips are cached in `avatar-cache/` by
+photo+audio content, so re-recording a flow whose narration didn't change
+doesn't re-run the models.
+
+The avatar appears only while a line is being narrated. Between lines the
+screencast is untouched — no frozen face hanging around during silence.
 
 ## Known limits
 

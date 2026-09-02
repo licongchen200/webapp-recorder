@@ -1,7 +1,7 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
-const { getEngineConfig, synthesizeWithPiper, synthesizeWithKokoro } = require('../src/synthesize-narration.js');
+const { getEngineConfig, synthesizeWithPiper, synthesizeWithKokoro, cacheKey } = require('../src/synthesize-narration.js');
 
 describe('getEngineConfig', () => {
   test('defaults to the say engine with .aiff output', () => {
@@ -65,6 +65,36 @@ describe('synthesizeWithKokoro', () => {
         modelPath: '/no/such/model.onnx', voicesPath: '/no/such/voices.bin', voice: 'af_heart', speed: 1.0,
       }, '/tmp/webapp-recorder-test-out.wav'),
       /Kokoro|model/i,
+    );
+  });
+});
+
+// The narration cache is what makes re-recording cheap — and what makes the
+// downstream avatar cache able to hit at all, since neural TTS is not
+// byte-stable (kokoro emits a different waveform for identical text every
+// call, verified). The key must therefore cover everything that changes the
+// audio, and nothing that doesn't.
+describe('cacheKey', () => {
+  const base = { engine: 'kokoro', voice: 'af_heart', speed: 1.0, modelPath: '/m.onnx', voicesPath: '/v.bin' };
+
+  test('same text and settings produce the same key', () => {
+    assert.equal(cacheKey('Open Billing.', base), cacheKey('Open Billing.', base));
+  });
+
+  test('any change that changes the audio changes the key', () => {
+    const k = cacheKey('Open Billing.', base);
+    assert.notEqual(k, cacheKey('Open Settings.', base), 'text');
+    assert.notEqual(k, cacheKey('Open Billing.', { ...base, voice: 'af_bella' }), 'voice');
+    assert.notEqual(k, cacheKey('Open Billing.', { ...base, speed: 1.2 }), 'speed');
+    assert.notEqual(k, cacheKey('Open Billing.', { ...base, engine: 'piper' }), 'engine');
+    assert.notEqual(k, cacheKey('Open Billing.', { ...base, modelPath: '/other.onnx' }), 'model');
+  });
+
+  test('fields are separated, so a shift between them cannot collide', () => {
+    // Without a separator, ("ab", voice "c") and ("a", voice "bc") collide.
+    assert.notEqual(
+      cacheKey('ab', { ...base, voice: 'c' }),
+      cacheKey('a', { ...base, voice: 'bc' }),
     );
   });
 });

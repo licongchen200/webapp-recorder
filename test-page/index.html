@@ -1,0 +1,96 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Acme Console</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+         color:#0f172a; background:#f1f5f9; }
+  header { background:#fff; border-bottom:1px solid #e2e8f0; padding:16px 32px;
+           display:flex; align-items:center; gap:28px; }
+  .logo { font-weight:800; font-size:19px; letter-spacing:-.02em; }
+  nav button { background:none; border:0; font:inherit; color:#475569; cursor:pointer;
+               padding:8px 4px; border-bottom:2px solid transparent; }
+  nav button:hover { color:#0f172a; }
+  nav button.active { color:#4f46e5; border-bottom-color:#4f46e5; font-weight:600; }
+  main { padding:40px 32px; max-width:1100px; }
+  h1 { font-size:30px; letter-spacing:-.02em; margin:0 0 6px; }
+  .sub { color:#64748b; margin:0 0 28px; }
+  .cards { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; margin-bottom:28px; }
+  .card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:20px; }
+  .card .k { color:#64748b; font-size:13px; text-transform:uppercase; letter-spacing:.06em; }
+  .card .v { font-size:30px; font-weight:700; margin-top:6px; }
+  input { width:340px; padding:11px 14px; border:1px solid #cbd5e1; border-radius:9px;
+          font:inherit; background:#fff; }
+  table { width:100%; border-collapse:collapse; background:#fff; margin-top:18px;
+          border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; }
+  th,td { text-align:left; padding:13px 16px; border-bottom:1px solid #f1f5f9; }
+  th { background:#f8fafc; font-size:13px; color:#64748b; text-transform:uppercase; letter-spacing:.05em; }
+  .pill { background:#dcfce7; color:#166534; border-radius:999px; padding:3px 11px; font-size:13px; font-weight:600; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="logo">Acme Console</div>
+    <nav>
+      <button class="active" data-view="overview">Overview</button>
+      <button data-view="billing">Billing</button>
+      <button data-view="settings">Settings</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="overview">
+      <h1>Overview</h1>
+      <p class="sub">Everything running normally.</p>
+      <div class="cards">
+        <div class="card"><div class="k">Requests</div><div class="v">128k</div></div>
+        <div class="card"><div class="k">Errors</div><div class="v">0.02%</div></div>
+        <div class="card"><div class="k">Uptime</div><div class="v">99.99%</div></div>
+      </div>
+    </section>
+
+    <section id="billing" class="hidden">
+      <h1>Billing</h1>
+      <p class="sub">Search invoices by month.</p>
+      <input placeholder="Search invoices" id="q">
+      <table>
+        <tr><th>Invoice</th><th>Period</th><th>Amount</th><th>Status</th></tr>
+        <tbody id="rows">
+          <tr><td>INV-1043</td><td>March</td><td>$240.00</td><td><span class="pill">Paid</span></td></tr>
+          <tr><td>INV-1042</td><td>February</td><td>$240.00</td><td><span class="pill">Paid</span></td></tr>
+          <tr><td>INV-1041</td><td>January</td><td>$180.00</td><td><span class="pill">Paid</span></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="settings" class="hidden">
+      <h1>Settings</h1>
+      <p class="sub">Workspace configuration.</p>
+      <div class="card" style="max-width:520px">
+        <div class="k">Plan</div><div class="v">Team</div>
+      </div>
+    </section>
+  </main>
+
+<script>
+  document.querySelectorAll('nav button').forEach((b) => {
+    b.onclick = () => {
+      document.querySelectorAll('nav button').forEach((x) => x.classList.remove('active'));
+      b.classList.add('active');
+      for (const id of ['overview', 'billing', 'settings']) {
+        document.getElementById(id).classList.toggle('hidden', id !== b.dataset.view);
+      }
+    };
+  });
+  document.getElementById('q').addEventListener('input', (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    for (const row of document.querySelectorAll('#rows tr')) {
+      row.style.display = !q || row.textContent.toLowerCase().includes(q) ? '' : 'none';
+    }
+  });
+</script>
+</body>
+</html>

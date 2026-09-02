@@ -48,7 +48,8 @@ function main() {
   if (flow.resolution) {
     args.push('-vf', `scale=${parseResolution(flow.resolution)}`);
   }
-  args.push('-vsync', 'vfr', '-pix_fmt', 'yuv420p', outPath);
+  // -fps_mode replaced -vsync (deprecated); needs ffmpeg >= 5.0.
+  args.push('-fps_mode', 'vfr', '-pix_fmt', 'yuv420p', outPath);
 
   execFileSync('ffmpeg', args, { stdio: 'inherit' });
 

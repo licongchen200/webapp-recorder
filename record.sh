@@ -28,8 +28,12 @@ FRAMES_MANIFEST="$WORK_DIR/frames.json"
 # stealing CPU and throwing off step timing.
 SLIDES_PLAN="$SLIDES_PLAN" node src/synthesize-narration.js "$FLOW" "$WORK_DIR"
 
-START_MS=$(node -e 'console.log(Date.now())')
-START_MS="$START_MS" NARRATION_LOG="$NARRATION_LOG" NARRATION_PLAN="$NARRATION_PLAN" \
+# No START_MS here on purpose: narration offsets are measured from the first
+# captured frame (inside click-flow.js), which is where the video timeline
+# actually begins. A clock taken out here would be ~0.5s early — node boot +
+# playwright require + the CDP connect all happen before capture starts —
+# and every narration clip would land that much late.
+NARRATION_LOG="$NARRATION_LOG" NARRATION_PLAN="$NARRATION_PLAN" \
   SLIDES_PLAN="$SLIDES_PLAN" FRAMES_DIR="$FRAMES_DIR" FRAMES_MANIFEST="$FRAMES_MANIFEST" \
   node src/click-flow.js "$FLOW"
 
@@ -42,5 +46,11 @@ if [ "$EVENT_COUNT" -gt 0 ]; then
 else
   mv "$RAW" "$OUT"
 fi
+
+# Optional lip-synced avatar overlay (no-op unless the flow sets "avatar").
+# Cached across runs in avatar-cache/, keyed by photo+audio content, so
+# re-recording the same flow doesn't re-run the models.
+node src/apply-avatar.js "$FLOW" "$OUT" "$NARRATION_LOG" avatar-cache
+
 rm -rf "$WORK_DIR"
 echo "Saved $OUT"
