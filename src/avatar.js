@@ -16,14 +16,22 @@ const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const PIPELINE = path.join(__dirname, '..', '..', 'video-pipeline');
-const AVATAR_PY = path.join(PIPELINE, 'src', 'avatar.py');
-// Each engine lives in its own venv over in video-pipeline (they pin
-// incompatible torch/numpy versions and cannot share one).
-const ENGINE_PYTHON = {
-  wav2lip: path.join(PIPELINE, '.avatar-venv', 'bin', 'python3'),
-  sadtalker: path.join(PIPELINE, '.sadtalker-venv', 'bin', 'python3'),
-};
+// The avatar is the one feature that needs the sibling video-pipeline
+// project (for its Wav2Lip/SadTalker engines and their ~3GB of checkpoints —
+// worth borrowing, not duplicating). Everything else in this repo stands
+// alone. Point VIDEO_PIPELINE_DIR anywhere, or set avatar.pipelineDir in the
+// flow; the default assumes the two repos are cloned side by side.
+function pipelineDir(cfg = {}) {
+  return path.resolve(
+    cfg.pipelineDir
+    || process.env.VIDEO_PIPELINE_DIR
+    || path.join(__dirname, '..', '..', 'video-pipeline'),
+  );
+}
+
+// Each engine lives in its own venv over there (they pin incompatible
+// torch/numpy versions and cannot share one).
+const ENGINE_VENV = { wav2lip: '.avatar-venv', sadtalker: '.sadtalker-venv' };
 
 const POSITIONS = {
   'bottom-right': (s, m) => [`W-${s}-${m}`, `H-${s}-${m}`],
@@ -41,27 +49,39 @@ function resolveConfig(flow) {
     position: a.position || 'bottom-right',
     size: a.size || 280,
     margin: a.margin ?? 48,
+    pipelineDir: pipelineDir(a),
   };
 }
 
 // Runs the engines once for all narration clips (one python startup, not one
 // per clip — loading a 400MB+ checkpoint per event would dominate runtime).
 function synthesizeClips(cfg, events, cacheDir) {
-  const python = ENGINE_PYTHON[cfg.engine];
-  if (!python) {
-    throw new Error(`unknown avatar.engine "${cfg.engine}" — use ${Object.keys(ENGINE_PYTHON).join(' or ')}`);
+  const venv = ENGINE_VENV[cfg.engine];
+  if (!venv) {
+    throw new Error(`unknown avatar.engine "${cfg.engine}" — use ${Object.keys(ENGINE_VENV).join(' or ')}`);
+  }
+  const pipeline = cfg.pipelineDir;
+  const avatarPy = path.join(pipeline, 'src', 'avatar.py');
+  const python = path.join(pipeline, venv, 'bin', 'python3');
+
+  if (!fs.existsSync(avatarPy)) {
+    throw new Error(
+      `avatar needs the video-pipeline project, not found at ${pipeline}\n`
+      + 'clone https://github.com/licongchen200/video-pipeline beside this repo, '
+      + 'or set VIDEO_PIPELINE_DIR / avatar.pipelineDir to where it lives',
+    );
   }
   if (!fs.existsSync(python)) {
     throw new Error(
       `${cfg.engine} venv not found at ${python}\n`
-      + `run \`make avatar-setup${cfg.engine === 'sadtalker' ? '-sadtalker' : ''}\` in ${PIPELINE}`,
+      + `run \`make avatar-setup${cfg.engine === 'sadtalker' ? '-sadtalker' : ''}\` in ${pipeline}`,
     );
   }
   if (!fs.existsSync(cfg.face)) throw new Error(`avatar.face not found: ${cfg.face}`);
 
   const out = execFileSync(
     python,
-    [AVATAR_PY, path.resolve(cfg.face), cacheDir, cfg.engine, ...events.map((e) => path.resolve(e.file))],
+    [avatarPy, path.resolve(cfg.face), cacheDir, cfg.engine, ...events.map((e) => path.resolve(e.file))],
     { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], maxBuffer: 1 << 24 },
   );
   return JSON.parse(out.trim());

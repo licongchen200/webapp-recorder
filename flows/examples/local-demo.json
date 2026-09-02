@@ -8,9 +8,10 @@
     "subtitle": "Finding an invoice in 30 seconds",
     "say": "Here's how to find an invoice in the Acme console."
   },
-  "avatar": {
+  "_avatar_note": "Optional. Needs the video-pipeline project and a face photo of your own — see README. Rename this key to 'avatar' to enable.",
+  "_avatar": {
     "enabled": true,
-    "face": "../video-pipeline/assets/w1.jpg",
+    "face": "assets/face.jpg",
     "engine": "sadtalker",
     "position": "bottom-right",
     "size": 221,
